@@ -28,9 +28,7 @@ import java.util.logging.Logger;
 
 public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.ParameterizedJob> extends Trigger<T> {
     private static final Logger LOGGER = Logger.getLogger(AmqpBuildTrigger.class.getName());
-    private static final String KEY_PARAM_NAME = "name";
-    private static final String KEY_PARAM_VALUE = "value";
-    private static final String PLUGIN_NAME = "[AmqpBuildTrigger] - Trigger builds using AMQP 1.0 messages";
+    private static final String PLUGIN_NAME = "Trigger build from AMQP 1.0 messages";
     private List<AmqpBrokerParams> amqpBrokerParamsList = new CopyOnWriteArrayList<AmqpBrokerParams>();
 
     @DataBoundConstructor
@@ -63,10 +61,12 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
     public void scheduleBuild(String messageSource, String message) {
         if (job != null && messageSource != null) {
             LOGGER.info("ScheduleBuild with message: " + message);
-            JSONArray jsonArray = convertStringToJSONArray(message);
-            if (jsonArray != null) {
-                LOGGER.info("Message in JSONArray format, converting to matching params ...");
-                List<ParameterValue> parameters = getUpdatedParameters(jsonArray, getDefinitionParameters(job));
+            JSONObject jMessage = new JSONObject().fromObject(message);
+            if (jMessage != null) {
+                LOGGER.info("Message in JSON format, converting to matching params ...");
+                // get the parameters from the message payload
+                List<ParameterValue> parameters = getParamsFromMsgPayload(jMessage, job);
+                // call the build with the parameters
                 ParameterizedJobMixIn.scheduleBuild2(job, 0, new CauseAction(new RemoteBuildCause(messageSource)), new ParametersAction(parameters));
             } else {
                 LOGGER.info("Message NOT in JSONArray format");
@@ -75,43 +75,38 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
         }
     }
 
-    // method to convert a string into a JSONArray
-    private JSONArray convertStringToJSONArray(String message) {
-        try {
-            return JSONArray.fromObject(message);
-        } catch (Exception e) {
-            return JSONArray.fromObject("[]");
-        }
-    } 
-
-    private List<ParameterValue> getUpdatedParameters(JSONArray jsonParameters, List<ParameterValue> definedParameters) {
-        List<ParameterValue> newParams = new CopyOnWriteArrayList<ParameterValue>();
-        for (ParameterValue defParam : definedParameters) {
-            for (int i = 0; i < jsonParameters.size(); i++) {
-                JSONObject jsonParam = jsonParameters.getJSONObject(i);
-                if (defParam.getName().toUpperCase().equals(jsonParam.getString(KEY_PARAM_NAME).toUpperCase())) {
-                    newParams.add(new StringParameterValue(defParam.getName(), jsonParam.getString(KEY_PARAM_VALUE)));
-                }
-            }
-        }
-        LOGGER.info("Params: " + newParams.toString());
-        return newParams;
-    }
-
-    private List<ParameterValue> getDefinitionParameters(Job<?, ?> project) {
+    private List<ParameterValue> getParamsFromMsgPayload(JSONObject payload, Job<?, ?> project) {
         List<ParameterValue> parameters = new CopyOnWriteArrayList<ParameterValue>();
         if (project != null) {
             ParametersDefinitionProperty properties = project.getProperty(ParametersDefinitionProperty.class);
             if (properties != null) {
                 for (ParameterDefinition paramDef : properties.getParameterDefinitions()) {
-                    ParameterValue param = paramDef.getDefaultParameterValue();
-                    if (param != null) {
-                        parameters.add(param);
+                    ParameterValue defaultParam = paramDef.getDefaultParameterValue();
+                    ParameterValue payloadParam = getParamValueFromPayload(
+                        payload, defaultParam.getName().toUpperCase()
+                    );
+                    if (defaultParam != null) {
+                        parameters.add(payloadParam != null ? payloadParam : defaultParam);
                     }
                 }
             }
         }
+        LOGGER.info("Params: " + parameters.toString());
         return parameters;
+    }
+
+    private ParameterValue getParamValueFromPayload(JSONObject msgParams, String paramName) {
+        LOGGER.info("Searching for param: " + paramName);
+        String jsonParamValue = msgParams.optString(paramName);
+        ParameterValue newParam = null;
+        if (jsonParamValue != null && !jsonParamValue.trim().isEmpty()) {
+            LOGGER.info("Param '" + paramName + "' found: " + jsonParamValue);
+            newParam = new StringParameterValue(
+                paramName, 
+                jsonParamValue
+            );
+        }
+        return newParam;
     }
 
     @Override
