@@ -55,7 +55,7 @@ docker run -it --rm --platform=linux/amd64 -v $PWD:/work -w /work -p 8080:8080 -
 
 Validate the code with `mvn validate`
 
-Test your plugin changes into an embebed Jenkins with `mvn hpi:run`, [more info](https://www.jenkins.io/doc/developer/tutorial/run/).
+Test your plugin changes into an embebed Jenkins with `mvn hpi:run`, and play at your browser [http://localhost:8080/jenkins/](http://localhost:8080/jenkins/), [more info](https://www.jenkins.io/doc/developer/tutorial/run/).
 
 Build your hpi to be installed onto your Jenkins with `mvn hpi:hpi`, [more info](https://jenkinsci.github.io/maven-hpi-plugin/).`
 
