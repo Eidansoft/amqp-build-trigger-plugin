@@ -25,23 +25,46 @@ import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.verb.POST;
 
+import com.cloudbees.plugins.credentials.CredentialsProvider;
+import com.cloudbees.plugins.credentials.common.UsernamePasswordCredentials;
+import hudson.security.ACL;
+
 // Temporary, until enforcer issues with org.apache.commons.validator can be sorted out
 import com.redhat.jenkins.plugins.validator.UrlValidator;
+import java.util.Collections;
 
 public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
     private static final String DISPLAY_NAME = "AMQP server parameters";
 
     private String url;
     private String user;
-    private Secret password;
+    private String credentialsId;
     private String sourceAddr;
 
     @DataBoundConstructor
-    public AmqpBrokerParams(String url, String username, Secret password, String sourceAddr) {
+    public AmqpBrokerParams(String url, String username, String credentialsId, String sourceAddr) {
         this.url = url;
         this.user = username;
-        this.password = password;
+        this.credentialsId = credentialsId;
         this.sourceAddr = sourceAddr;
+    }
+
+    public Secret getPassword() {
+        return getPassword(credentialsId);
+    }
+
+    public static Secret getPassword(String credentialsId) {
+        UsernamePasswordCredentials c = getCredentials(credentialsId);
+        return c != null ? c.getPassword() : Secret.fromString("");
+    }
+    
+    public static UsernamePasswordCredentials getCredentials(String credentialsId) {
+        return CredentialsProvider.lookupCredentials(
+            UsernamePasswordCredentials.class,
+            Jenkins.getActiveInstance(),
+            ACL.SYSTEM,
+            Collections.emptyList()
+        ).stream().filter(c -> c.getId().equals(credentialsId)).findFirst().orElse(null);
     }
 
     public String getUrl() {
@@ -50,10 +73,6 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
 
     public String getUser() {
         return user;
-    }
-
-    public Secret getPassword() {
-        return password;
     }
 
     public String getSourceAddr() {
@@ -71,13 +90,13 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
     }
 
     @DataBoundSetter
-    public void setPassword(Secret password) {
-        this.password = password;
+    public void setCredentialsId(String credentialsId) {
+        this.credentialsId = credentialsId;
     }
 
-    public void setUserPassword(String password) {
-        this.password = Secret.fromString(password);
-    }
+    // public void setUserPassword(String password) {
+    //     this.password = Secret.fromString(password);
+    // }
 
     @DataBoundSetter
     public void setSourceAddr(String sourceAddr) {
@@ -117,7 +136,7 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
         @POST
         public FormValidation doTestConnection(@QueryParameter("url") String url,
         		                               @QueryParameter("user") String user,
-        		                               @QueryParameter("passowrd") String password,
+        		                               @QueryParameter("credentialsId") String credentialsId,
         		                               @QueryParameter("sourceAddr") String sourceAddr) throws ServletException {
             Jenkins.getInstance().checkPermission(Jenkins.ADMINISTER);
             String uri = StringUtils.strip(StringUtils.stripToNull(url), "/");
@@ -126,7 +145,7 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
                 try {
                     JmsConnectionFactory factory = new JmsConnectionFactory(uri);
                     JmsConnection connection;
-                    Secret spw = Secret.fromString(password);
+                    Secret spw = getPassword(credentialsId);
                     if (user.isEmpty() || spw.getPlainText().isEmpty()) {
                         connection = (JmsConnection)factory.createConnection();
                     } else {
