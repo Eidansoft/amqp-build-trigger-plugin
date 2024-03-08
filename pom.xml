@@ -4,15 +4,15 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.26</version>
+        <version>4.33</version>
         <relativePath />
     </parent>
     <groupId>io.jenkins.plugins</groupId>
     <artifactId>amqp-build-trigger</artifactId>
-    <version>1.1-SNAPSHOT</version>
+    <version>1.2-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
-        <jenkins.version>2.7.3</jenkins.version>
+        <jenkins.version>2.303.3</jenkins.version>
         <java.level>8</java.level>
     </properties>
     <name>AMQP Build Trigger Plugin</name>
@@ -36,6 +36,11 @@
             <name>Kim van der Riet</name>
             <email>kpvdr@apache.org</email>
         </developer>
+        <developer>
+            <id>Eidansoft</id>
+            <name>Alejandro Lorente</name>
+            <email>10463038+Eidansoft@users.noreply.github.com</email>
+        </developer>
     </developers>
     <repositories>
         <repository>
@@ -50,30 +55,50 @@
         </pluginRepository>
     </pluginRepositories>
     <dependencies>
-    	<dependency>
-    		<groupId>org.apache.commons</groupId>
-    		<artifactId>commons-lang3</artifactId>
-    		<version>3.8</version>
-    	</dependency>
-		<!--  dependency>
-		    <groupId>commons-validator</groupId>
-		    <artifactId>commons-validator</artifactId>
-		    <version>1.6</version>
-		</dependency -->
-		<dependency>
-    		<groupId>org.apache.geronimo.specs</groupId>
-    		<artifactId>geronimo-jms_2.0_spec</artifactId>
-    		<version>1.0-alpha-2</version>
-    	</dependency>
-    	<dependency>
-    		<groupId>org.apache.qpid</groupId>
-    		<artifactId>qpid-jms-client</artifactId>
-    		<version>0.42.0</version>
-    	</dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+            <version>1.7.31</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>log4j-over-slf4j</artifactId>
+            <version>1.7.31</version>
+        </dependency>
+        <dependency>
+            <groupId>org.kohsuke</groupId>
+            <artifactId>access-modifier-annotation</artifactId>
+            <version>1.21</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>1.7.31</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.jms</groupId>
+            <artifactId>javax.jms-api</artifactId>
+            <version>2.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.qpid</groupId>
+            <artifactId>qpid-jms-client</artifactId>
+            <version>0.56.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.12.0</version>
+        </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins.workflow</groupId>
             <artifactId>workflow-job</artifactId>
-            <version>2.12.2</version>
+            <version>2.42</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jenkins-ci</groupId>
+            <artifactId>symbol-annotation</artifactId>
+            <version>1.20</version>
         </dependency>
     </dependencies>
 </project>
