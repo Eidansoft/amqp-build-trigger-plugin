@@ -29,17 +29,16 @@ import org.kohsuke.stapler.verb.POST;
 import com.redhat.jenkins.plugins.validator.UrlValidator;
 
 public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
-    private static final String DISPLAY_NAME = "AMQP server parameters";
 
     private String url;
     private String user;
-    private Secret password;
+    private String password;
     private String sourceAddr;
 
     @DataBoundConstructor
-    public AmqpBrokerParams(String url, String username, Secret password, String sourceAddr) {
+    public AmqpBrokerParams(String url, String user, String password, String sourceAddr) {
         this.url = url;
-        this.user = username;
+        this.user = user;
         this.password = password;
         this.sourceAddr = sourceAddr;
     }
@@ -53,7 +52,7 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
     }
 
     public Secret getPassword() {
-        return password;
+        return Secret.fromString(password);
     }
 
     public String getSourceAddr() {
@@ -71,12 +70,8 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
     }
 
     @DataBoundSetter
-    public void setPassword(Secret password) {
+    public void setPassword(String password) {
         this.password = password;
-    }
-
-    public void setUserPassword(String password) {
-        this.password = Secret.fromString(password);
     }
 
     @DataBoundSetter
@@ -107,7 +102,7 @@ public class AmqpBrokerParams implements Describable<AmqpBrokerParams> {
 
         @Override
         public String getDisplayName() {
-            return DISPLAY_NAME;
+            return "AMQP server parameters";
         }
 
         public static ExtensionList<AmqpBrokerUrlDescriptor> all() {

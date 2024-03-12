@@ -57,6 +57,11 @@ Validate the code with `mvn validate`
 
 Test your plugin changes into an embebed Jenkins with `mvn hpi:run`, [more info](https://www.jenkins.io/doc/developer/tutorial/run/). TODO: fix
 
+Another posibility to manually test is to instanciate a Jenkins, and insntall the plugin hpi file generated to test:
+```
+docker run -v jenkins_home:/var/jenkins_home -p 8080:8080 -p 50000:50000 --rm --name jenkins jenkins/jenkins:lts-jdk17
+```
+
 Build your hpi to be installed onto your Jenkins with `mvn hpi:hpi`, [more info](https://jenkinsci.github.io/maven-hpi-plugin/).`
 
 **NOTE:** If you have the `qpid-cpp-client-devel` package installed, it is possible to test a configuration by quickly sending a trigger message using `qpid-send` through a broker as follows (and to which the trigger must be configured to listen):

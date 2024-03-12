@@ -1,3 +1,16 @@
 <div>
-  <p>Add one or more AMQP message source(s) that will provide messages used to trigger a build.</p>
+  <p>
+    Add one or more AMQP message source(s) that will trigger a build using the payload data as parameters for the job. Currently supported String and Boolean parameters.<br/>
+    AMQP payload example:<br/>
+    <blockquote>
+      {
+        "P2": "otro valor para P2",
+        "P1": "seteado en payload",
+        "B1": true,
+        "B2":false
+      }
+    </blockquote>
+    <br/>
+    With that payload, if the job has the parameters P1, P2, B1, B2, the job will be triggered using the values provided. In case the job has not some parameters defined, those will be ignored. In case the job has other parameters defined not present at payload, they will took the default value.
+  </p>
 </div>

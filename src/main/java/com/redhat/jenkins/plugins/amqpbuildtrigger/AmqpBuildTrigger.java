@@ -9,6 +9,8 @@ import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterValue;
+import hudson.model.BooleanParameterValue;
+import hudson.model.BooleanParameterDefinition;
 import hudson.triggers.Trigger;
 import hudson.triggers.TriggerDescriptor;
 
@@ -28,9 +30,6 @@ import java.util.logging.Logger;
 
 public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.ParameterizedJob> extends Trigger<T> {
     private static final Logger LOGGER = Logger.getLogger(AmqpBuildTrigger.class.getName());
-    private static final String KEY_PARAM_NAME = "name";
-    private static final String KEY_PARAM_VALUE = "value";
-    private static final String PLUGIN_NAME = "[AmqpBuildTrigger] - Trigger builds using AMQP 1.0 messages";
     private List<AmqpBrokerParams> amqpBrokerParamsList = new CopyOnWriteArrayList<AmqpBrokerParams>();
 
     @DataBoundConstructor
@@ -63,10 +62,12 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
     public void scheduleBuild(String messageSource, String message) {
         if (job != null && messageSource != null) {
             LOGGER.info("ScheduleBuild with message: " + message);
-            JSONArray jsonArray = convertStringToJSONArray(message);
-            if (jsonArray != null) {
-                LOGGER.info("Message in JSONArray format, converting to matching params ...");
-                List<ParameterValue> parameters = getUpdatedParameters(jsonArray, getDefinitionParameters(job));
+            JSONObject jMessage = new JSONObject().fromObject(message);
+            if (jMessage != null) {
+                LOGGER.info("Message in JSON format, converting to matching params ...");
+                // get the parameters from the message payload
+                List<ParameterValue> parameters = getParamsFromMsgPayload(jMessage, job);
+                // call the build with the parameters
                 ParameterizedJobMixIn.scheduleBuild2(job, 0, new CauseAction(new RemoteBuildCause(messageSource)), new ParametersAction(parameters));
             } else {
                 LOGGER.info("Message NOT in JSONArray format");
@@ -75,43 +76,54 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
         }
     }
 
-    // method to convert a string into a JSONArray
-    private JSONArray convertStringToJSONArray(String message) {
-        try {
-            return JSONArray.fromObject(message);
-        } catch (Exception e) {
-            return JSONArray.fromObject("[]");
-        }
-    } 
-
-    private List<ParameterValue> getUpdatedParameters(JSONArray jsonParameters, List<ParameterValue> definedParameters) {
-        List<ParameterValue> newParams = new CopyOnWriteArrayList<ParameterValue>();
-        for (ParameterValue defParam : definedParameters) {
-            for (int i = 0; i < jsonParameters.size(); i++) {
-                JSONObject jsonParam = jsonParameters.getJSONObject(i);
-                if (defParam.getName().toUpperCase().equals(jsonParam.getString(KEY_PARAM_NAME).toUpperCase())) {
-                    newParams.add(new StringParameterValue(defParam.getName(), jsonParam.getString(KEY_PARAM_VALUE)));
-                }
-            }
-        }
-        LOGGER.info("Params: " + newParams.toString());
-        return newParams;
-    }
-
-    private List<ParameterValue> getDefinitionParameters(Job<?, ?> project) {
+    private List<ParameterValue> getParamsFromMsgPayload(JSONObject payload, Job<?, ?> project) {
         List<ParameterValue> parameters = new CopyOnWriteArrayList<ParameterValue>();
         if (project != null) {
             ParametersDefinitionProperty properties = project.getProperty(ParametersDefinitionProperty.class);
             if (properties != null) {
                 for (ParameterDefinition paramDef : properties.getParameterDefinitions()) {
-                    ParameterValue param = paramDef.getDefaultParameterValue();
-                    if (param != null) {
-                        parameters.add(param);
+                    ParameterValue defaultParam = paramDef.getDefaultParameterValue();
+                    if (defaultParam != null) {
+                        ParameterValue payloadParam = getParamValueFromPayload(
+                            payload, defaultParam.getName().toUpperCase(),
+                            paramDef instanceof BooleanParameterDefinition ? "bool" : "string",
+                            defaultParam
+                        );
+                        if (payloadParam != null) {
+                            parameters.add(payloadParam);
+                        }
                     }
                 }
             }
         }
+        LOGGER.info("Params: " + parameters.toString());
         return parameters;
+    }
+
+    private ParameterValue getParamValueFromPayload(JSONObject msgParams, String paramName, String paramType, ParameterValue defaultParam) {
+        LOGGER.info("Searching for param: " + paramName);
+        ParameterValue newParam = null;
+
+        if (msgParams != null && defaultParam != null && paramName != null && paramType != null && !paramName.isEmpty() && !paramType.isEmpty()){
+            Object defaultValue = defaultParam.getValue();
+            if (defaultValue != null) {
+                if (paramType.equals("string")) {
+                    String jsonParamValue = msgParams.optString(paramName, defaultValue.toString());
+                    newParam = new StringParameterValue(
+                        paramName, 
+                        jsonParamValue
+                    );
+                } else if (paramType.equals("bool")) {
+                    Boolean jsonParamValue = msgParams.optBoolean(paramName, (Boolean) defaultValue);
+                    newParam = new BooleanParameterValue(
+                        paramName, 
+                        jsonParamValue
+                    );
+                }
+            }
+        }
+        
+        return newParam;
     }
 
     @Override
@@ -129,7 +141,7 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
 
         @Override
         public String getDisplayName() {
-            return PLUGIN_NAME;
+            return "AMQP-1.0 trigger";
         }
     }
 }
