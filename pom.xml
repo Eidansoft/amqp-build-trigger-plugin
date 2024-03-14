@@ -86,5 +86,11 @@
             <artifactId>workflow-job</artifactId>
             <version>2.12.2</version>
         </dependency>
+        <!-- Not sure if needed, need to fully empty the mvn local repo and rerun mvn clean install to test
+             <dependency>
+            <groupId>org.connectbot.jbcrypt</groupId>
+            <artifactId>jbcrypt</artifactId>
+            <version>1.0.0</version>
+        </dependency> -->
     </dependencies>
 </project>
