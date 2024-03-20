@@ -12,6 +12,7 @@ import hudson.model.StringParameterValue;
 import hudson.model.StringParameterDefinition;
 import hudson.model.BooleanParameterValue;
 import hudson.model.BooleanParameterDefinition;
+import hudson.model.ChoiceParameterDefinition;
 import hudson.triggers.Trigger;
 import hudson.triggers.TriggerDescriptor;
 
@@ -32,6 +33,7 @@ import java.util.logging.Logger;
 public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.ParameterizedJob> extends Trigger<T> {
     private static final Logger LOGGER = Logger.getLogger(AmqpBuildTrigger.class.getName());
     private List<AmqpBrokerParams> amqpBrokerParamsList = new CopyOnWriteArrayList<AmqpBrokerParams>();
+    private static final String others_param_name = "OTHERS";
 
     @DataBoundConstructor
     public AmqpBuildTrigger(List<AmqpBrokerParams> amqpBrokerParamsList) {
@@ -61,6 +63,9 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
     }
 
     public void scheduleBuild(String messageSource, String message) {
+        /* Launch the build job, if the AMQP message payload is in JSON format, use
+        /  the parameters from the payload, if not, call the build without parameters
+        */
         if (job != null && messageSource != null) {
             LOGGER.info("ScheduleBuild with message: " + message);
             JSONObject jMessage = null;
@@ -83,13 +88,16 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
     }
 
     private List<ParameterValue> getParamsFromMsgPayload(JSONObject payload, Job<?, ?> job) {
+        /* For every parameter in the payload, look for a matching parameter in the job
+        /  and create a list of ParameterValue objects to be used in the build
+        */
         List<ParameterValue> parameters = new CopyOnWriteArrayList<ParameterValue>();
         JSONObject otherParams = new JSONObject();
         if (job != null) {
             for (Object key : payload.keySet()) {
                 if (key instanceof String) {
                     String paramName = (String) key;
-                    // Look for a matching parameter in the job
+                    // Look for a matching name parameter in the job
                     ParameterDefinition paramDef = findParameterInJob(paramName, job);
                     if (paramDef != null) {
                         // get the param value from the payload
@@ -109,7 +117,7 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
 
             // if otherParams is not empty, add it to the job as a single string parameter
             if (!otherParams.isEmpty()) {
-                parameters.add(new StringParameterValue("OTHERS", otherParams.toString()));
+                parameters.add(new StringParameterValue(others_param_name, otherParams.toString()));
             }
         }
         LOGGER.info("Params: " + parameters.toString());
@@ -133,17 +141,29 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
         ParameterValue newParam = null;
 
         if (msgParams != null && paramName != null && !paramName.isEmpty() && paramDef != null) {          
-            if (paramDef instanceof StringParameterDefinition) {
+            if (paramDef instanceof BooleanParameterDefinition) {
+                Boolean defaultValue = ((BooleanParameterDefinition) paramDef).getDefaultParameterValue().getValue();
+                if (defaultValue != null) {
+                    Boolean jsonParamValue = msgParams.optBoolean(paramName, defaultValue);
+                    newParam = new BooleanParameterValue(
+                        paramName, 
+                        jsonParamValue
+                    );
+                }
+            } else if (paramDef instanceof ChoiceParameterDefinition) {
+                StringParameterValue choiceParamVal = ((ChoiceParameterDefinition) paramDef).getDefaultParameterValue();
+                if (choiceParamVal != null) {
+                    String defaultValue = choiceParamVal.getValue();
+                    String jsonParamValue = msgParams.optString(paramName, defaultValue);
+                    newParam = new StringParameterValue(
+                        paramName,
+                        jsonParamValue
+                    );
+                }
+            } else if (paramDef instanceof StringParameterDefinition) {
                 String defaultValue = ((StringParameterDefinition) paramDef).getDefaultValue();
                 String jsonParamValue = msgParams.optString(paramName, defaultValue);
                 newParam = new StringParameterValue(
-                    paramName, 
-                    jsonParamValue
-                );
-            } else if (paramDef instanceof BooleanParameterDefinition) {
-                Boolean defaultValue = ((BooleanParameterDefinition) paramDef).getDefaultParameterValue().getValue();
-                Boolean jsonParamValue = msgParams.optBoolean(paramName, defaultValue);
-                newParam = new BooleanParameterValue(
                     paramName, 
                     jsonParamValue
                 );
