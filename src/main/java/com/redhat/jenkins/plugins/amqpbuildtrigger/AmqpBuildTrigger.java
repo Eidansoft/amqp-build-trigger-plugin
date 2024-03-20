@@ -9,6 +9,7 @@ import hudson.model.ParameterValue;
 import hudson.model.ParametersAction;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.StringParameterValue;
+import hudson.model.StringParameterDefinition;
 import hudson.model.BooleanParameterValue;
 import hudson.model.BooleanParameterDefinition;
 import hudson.triggers.Trigger;
@@ -62,7 +63,12 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
     public void scheduleBuild(String messageSource, String message) {
         if (job != null && messageSource != null) {
             LOGGER.info("ScheduleBuild with message: " + message);
-            JSONObject jMessage = new JSONObject().fromObject(message);
+            JSONObject jMessage = null;
+            try {
+                jMessage = new JSONObject().fromObject(message);
+            } catch (Exception e) {
+                LOGGER.info("Message '" + message + "' NOT in JSON format");
+            }
             if (jMessage != null) {
                 LOGGER.info("Message in JSON format, converting to matching params ...");
                 // get the parameters from the message payload
@@ -70,56 +76,77 @@ public class AmqpBuildTrigger<T extends Job<?, ?> & ParameterizedJobMixIn.Parame
                 // call the build with the parameters
                 ParameterizedJobMixIn.scheduleBuild2(job, 0, new CauseAction(new RemoteBuildCause(messageSource)), new ParametersAction(parameters));
             } else {
-                LOGGER.info("Message NOT in JSONArray format");
+                LOGGER.info("Triggering job without parameters ...");
                 ParameterizedJobMixIn.scheduleBuild2(job, 0, new CauseAction(new RemoteBuildCause(messageSource)));
             }
         }
     }
 
-    private List<ParameterValue> getParamsFromMsgPayload(JSONObject payload, Job<?, ?> project) {
+    private List<ParameterValue> getParamsFromMsgPayload(JSONObject payload, Job<?, ?> job) {
         List<ParameterValue> parameters = new CopyOnWriteArrayList<ParameterValue>();
-        if (project != null) {
-            ParametersDefinitionProperty properties = project.getProperty(ParametersDefinitionProperty.class);
-            if (properties != null) {
-                for (ParameterDefinition paramDef : properties.getParameterDefinitions()) {
-                    ParameterValue defaultParam = paramDef.getDefaultParameterValue();
-                    if (defaultParam != null) {
-                        ParameterValue payloadParam = getParamValueFromPayload(
-                            payload, defaultParam.getName().toUpperCase(),
-                            paramDef instanceof BooleanParameterDefinition ? "bool" : "string",
-                            defaultParam
+        JSONObject otherParams = new JSONObject();
+        if (job != null) {
+            for (Object key : payload.keySet()) {
+                if (key instanceof String) {
+                    String paramName = (String) key;
+                    // Look for a matching parameter in the job
+                    ParameterDefinition paramDef = findParameterInJob(paramName, job);
+                    if (paramDef != null) {
+                        // get the param value from the payload
+                        ParameterValue paramValue = getParamValueFromPayload(
+                            payload, paramName, 
+                            paramDef
                         );
-                        if (payloadParam != null) {
-                            parameters.add(payloadParam);
+                        if (paramValue != null) {
+                            parameters.add(paramValue);
                         }
+                    } else {
+                        // this param at payload is not in the job, so add it to the list of "other parameters"
+                        otherParams.put(paramName, payload.get(paramName));
                     }
                 }
+            }
+
+            // if otherParams is not empty, add it to the job as a single string parameter
+            if (!otherParams.isEmpty()) {
+                parameters.add(new StringParameterValue("OTHERS", otherParams.toString()));
             }
         }
         LOGGER.info("Params: " + parameters.toString());
         return parameters;
     }
 
-    private ParameterValue getParamValueFromPayload(JSONObject msgParams, String paramName, String paramType, ParameterValue defaultParam) {
+    private ParameterDefinition findParameterInJob(String parameterName, Job<?, ?> job) {
+        ParametersDefinitionProperty properties = job.getProperty(ParametersDefinitionProperty.class);
+        if (properties != null) {
+            for (ParameterDefinition paramDef : properties.getParameterDefinitions()) {
+                if (paramDef.getName().equals(parameterName)) {
+                    return paramDef;
+                }
+            }
+        }
+        return null;
+    }
+
+    private ParameterValue getParamValueFromPayload(JSONObject msgParams, String paramName, ParameterDefinition paramDef) {
         LOGGER.info("Searching for param: " + paramName);
         ParameterValue newParam = null;
 
-        if (msgParams != null && defaultParam != null && paramName != null && paramType != null && !paramName.isEmpty() && !paramType.isEmpty()){
-            Object defaultValue = defaultParam.getValue();
-            if (defaultValue != null) {
-                if (paramType.equals("string")) {
-                    String jsonParamValue = msgParams.optString(paramName, defaultValue.toString());
-                    newParam = new StringParameterValue(
-                        paramName, 
-                        jsonParamValue
-                    );
-                } else if (paramType.equals("bool")) {
-                    Boolean jsonParamValue = msgParams.optBoolean(paramName, (Boolean) defaultValue);
-                    newParam = new BooleanParameterValue(
-                        paramName, 
-                        jsonParamValue
-                    );
-                }
+        if (msgParams != null && paramName != null && !paramName.isEmpty() && paramDef != null) {          
+            if (paramDef instanceof StringParameterDefinition) {
+                String defaultValue = ((StringParameterDefinition) paramDef).getDefaultValue();
+                String jsonParamValue = msgParams.optString(paramName, defaultValue);
+                newParam = new StringParameterValue(
+                    paramName, 
+                    jsonParamValue
+                );
+            } else if (paramDef instanceof BooleanParameterDefinition) {
+                Boolean defaultValue = ((BooleanParameterDefinition) paramDef).getDefaultParameterValue().getValue();
+                Boolean jsonParamValue = msgParams.optBoolean(paramName, defaultValue);
+                newParam = new BooleanParameterValue(
+                    paramName, 
+                    jsonParamValue
+                );
             }
         }
         
